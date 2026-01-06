@@ -1,6 +1,6 @@
 # Agent Systems Comparison & Technical Deep Dive
 
-Here's a concise comparison of the two systems based on your repos.
+Here's a concise comparison of the two systems based on repos.
 
 ---
 
