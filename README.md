@@ -1,4 +1,4 @@
-# AI Agent Systems: Industrial-Grade Documentation
+# AI Agent Systems:  Documentation
 
 A comprehensive repository containing two production-ready AI agent systems: a **real-time conversational assistant** (Assistant-main) and a **self-operating computer automation framework** (Jarvis). This documentation provides complete setup, usage, and integration guidelines for both systems.
 
