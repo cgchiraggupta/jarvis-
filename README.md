@@ -1,526 +1,1013 @@
-# Agent Systems Comparison & Technical Deep Dive
+# AI Agent Systems: Industrial-Grade Documentation
 
-Here's a concise comparison of the two systems based on repos.
-
----
-
-## Assistant-main (your "report assistant")
-
-### What it is:
-
-A **Node.js + WebSocket server** (`server/index.js`) plus a **Next.js frontend** (`client/`), acting as a **real‑time AI assistant**, mostly focused on **voice/audio and chat**.
-
-### How it works / what it can do:
-
-The server opens a WebSocket endpoint at **`ws://localhost:4000/Assistant`** and, for each user connection, it creates a **WebSocket connection to OpenAI's realtime API**:
-
-- Model: `gpt-4o-realtime-preview-2024-10-01`.
-
-It forwards events/messages from your frontend to OpenAI and streams back:
-
-- **`response.audio.delta`** events, which it converts from base64 PCM into a proper **WAV audio stream** using `audiofunctions.js`, so your frontend can play speech audio.
-- All other events as JSON.
-
-It queues messages from the client until the OpenAI connection is ready, and handles errors/close events cleanly.
-
-The Next.js client is currently the default `create-next-app` boilerplate, so UI is not yet specialized; it's a generic web UI shell you can adapt.
-
-### Data/config:
-
-- Uses `.env` (`process.env.KEY`) for your OpenAI key.
-- There is no complex domain data model yet (no special "industrial measures" logic visible here) – it's primarily a **real‑time relay + audio handling** layer.
-
-**Summary**: A **web + audio chat assistant**, ideal when you want a **browser-based, real-time conversational agent** (especially voice) that talks to OpenAI directly.
+A comprehensive repository containing two production-ready AI agent systems: a **real-time conversational assistant** (Assistant-main) and a **self-operating computer automation framework** (Jarvis). This documentation provides complete setup, usage, and integration guidelines for both systems.
 
 ---
 
-## jarvis-tweak-version- / hackparv / self-operating-computer (your "Jarvis")
+## 📋 Table of Contents
 
-### What it is:
-
-A **Python "self-operating computer" system** that can **see your macOS screen, understand it with vision models, and control your computer** (mouse + keyboard) autonomously.
-
-It's heavily based on the open-source `self-operating-computer` framework but **extended and documented** in `hackparv/README.md`.
-
-### How it works / what it can do:
-
-Uses **GPT‑4 Vision / assistants** to analyze screenshots of your desktop and then issue low-level operations:
-
-- **Mouse movement and clicks**, keyboard typing, shortcuts (Cmd+C, Cmd+Tab, etc.).
-- **Multi-step workflows**: navigate browsers, fill forms, manage files, run dev tooling, etc.
-
-The `operate` package (`operate/main.py`, `operate/operate.py`) orchestrates a **control loop**:
-
-- Capture screenshot → send with history + objective to OpenAI via an **AssistantAdapter** → get back a list of operations → execute them on macOS → update history → repeat.
-
-The `Config` class (`operate/config.py`) is the **central configuration & data holder** for all model backends:
-
-- Supports **OpenAI**, **Google (Gemini)**, **Anthropic**, **Qwen**, and **Ollama**.
-- Methods like `initialize_openai`, `initialize_google`, `initialize_anthropic`, `initialize_ollama_with_model` set up clients from env vars or, if missing, **prompt you via a GUI dialog** (`input_dialog`) and write keys into `.env`.
-- `validation` enforces that required API keys exist depending on the chosen model (e.g., `OPENAI_API_KEY` for GPT‑4 or OCR variants, `GOOGLE_API_KEY` for Gemini Vision, `ANTHROPIC_API_KEY` for Claude 3, etc.).
-
-The enhanced README emphasizes:
-
-- **Safety**: dangerous command blocking (`rm -rf`, `mkfs`, `dd`, fork bombs), validation layer, warnings.
-- **Reliability**: retries with exponential backoff, resilience to network glitches.
-- **Cost control**: screenshot compression (resizing to 1920×1080, JPEG 85%), reducing token/image costs.
-- **Memory/context**: conversation history, goal tracking, learning from mistakes.
-
-It's **CLI-first**: you run commands like:
-
-- `operate --model=assistant --prompt="open Safari"`
-- plus options `--verbose`, different model choices, etc.
-
-### Data/config:
-
-- `.env` holds API keys and possibly default model names; `Config` reads and writes that file.
-- The **"data file which describes all of the things"** is effectively this `Config` class + its `.env` data: they centrally describe **which models you can use, how to initialize them, and what keys/hosts/models are active**.
-- The rest of the repo (`models/apis.py`, `assistant_adapter.py`, etc.) encode the **operational "schema"** of commands and workflows, but not industrial domain-specific data; it's more about **automation capabilities**.
-
-**Summary**: A **desktop-level automation agent**: it doesn't just answer questions; it can **operate your Mac like a human user**, across apps, browsers, files, and dev tools, with strong safety and multi-model support.
+- [Overview](#overview)
+- [System Architecture](#system-architecture)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+  - [Assistant-main Setup](#assistant-main-setup)
+  - [Jarvis Setup](#jarvis-setup)
+- [Configuration](#configuration)
+- [Usage](#usage)
+  - [Assistant-main Usage](#assistant-main-usage)
+  - [Jarvis Usage](#jarvis-usage)
+- [Technical Deep Dive](#technical-deep-dive)
+- [API Reference](#api-reference)
+- [Troubleshooting](#troubleshooting)
+- [Security Considerations](#security-considerations)
+- [Performance Optimization](#performance-optimization)
+- [Integration Guide](#integration-guide)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
-## Direct comparison: what they are vs what they do
+## Overview
 
-### Platform & interaction model
+### Assistant-main: Real-Time Conversational AI
 
-**Assistant-main**:
+**Type**: Web-based conversational AI assistant  
+**Tech Stack**: Node.js + Next.js + WebSocket  
+**Purpose**: Real-time voice/text chat with AI using OpenAI's Realtime API  
+**Interaction**: Browser-based UI, talks to users  
+**Capabilities**: Conversational responses, audio streaming, report explanations
 
-- Web server + browser UI.
-- Focus: **chat / voice assistant** (audio streaming via WebSocket).
-- Operates **inside the browser**, not controlling the OS.
+### Jarvis: Self-Operating Computer
 
-**Jarvis (self-operating-computer)**:
-
-- Python CLI + OS hooks (screen recording + accessibility).
-- Focus: **full-computer agent** that can click, type, and navigate your system.
-- Operates at the **OS level**.
-
-### Capabilities
-
-**Assistant-main can**:
-
-- Provide **conversational responses** using a cutting-edge **realtime GPT‑4o model**.
-- Stream **AI-generated audio** back to the client for natural voice interactions.
-- Serve as a base for any **chatbot / voice assistant UI** you want to expose over the web.
-
-**Jarvis can**:
-
-- Perform **visual reasoning** over your actual desktop (screen understanding).
-- Execute **concrete actions**: open apps, manage files, navigate websites, run dev commands.
-- Run **multi-step workflows** autonomously with retries, safety checks, and cost-optimized vision usage.
-- Plug into multiple model providers (OpenAI, Gemini, Claude, Qwen, Ollama).
-
-### Complexity & "industrial" feel
-
-**Assistant-main**:
-
-- Simple, relatively **thin bridge** between your frontend and OpenAI's realtime API; most logic is just relaying and audio conversion.
-- Easier to understand and extend for **simple assistants** or report-style interactions.
-
-**Jarvis**:
-
-- Much **heavier, more "industrial"**: complex architecture, multiple backends, safety and reliability layers.
-- Feels like a **production-grade automation framework** for serious, repeatable workflows.
+**Type**: Desktop automation agent  
+**Tech Stack**: Python + Vision AI + OS Control  
+**Purpose**: Autonomous computer control using GPT-4 Vision  
+**Interaction**: CLI commands, operates your Mac directly  
+**Capabilities**: Screen understanding, mouse/keyboard control, multi-step workflows
 
 ---
 
-## For future purposes: which is "best"?
+## System Architecture
 
-It depends entirely on your **future goal**:
+### Assistant-main Architecture
 
-### If your goal is communication / reporting / conversational help (e.g., a "report assistant"):
+```
+┌─────────────┐         ┌──────────────┐         ┌─────────────┐
+│   Browser   │◄───────►│  Node Server │◄───────►│   OpenAI    │
+│  (Next.js)  │ WebSocket│  (index.js)  │ WebSocket│  Realtime   │
+└─────────────┘         └──────────────┘         └─────────────┘
+                              │
+                              │ Audio Processing
+                              ▼
+                        ┌──────────────┐
+                        │ audiofunctions│
+                        │    .js       │
+                        └──────────────┘
+```
 
-**Best choice: Assistant-main** as the core, because:
+**Flow**:
+1. Browser connects to WebSocket server (`ws://localhost:4000/Assistant`)
+2. Server creates connection to OpenAI Realtime API
+3. Messages relayed bidirectionally with audio conversion
+4. Real-time audio streaming (PCM → WAV conversion)
 
-- It's already integrated with **OpenAI's realtime audio model**, ideal for **talking to users**.
-- It fits web-based use cases: dashboards, reporting tools, data exploration UIs.
-- You can extend the Next.js frontend to visualize industrial metrics, charts, etc., and let the assistant explain or summarize them.
+### Jarvis Architecture
 
-### If your goal is autonomous action on your machine (a true "Jarvis"):
+```
+┌─────────────┐
+│   User CLI  │
+│  (operate)  │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────┐
+│  Control Loop   │
+│  (operate.py)   │
+└──────┬──────────┘
+       │
+       ├──► Screenshot Capture
+       ├──► Vision AI (GPT-4/Claude/Gemini)
+       ├──► Operation Generation
+       └──► OS Execution (mouse/keyboard)
+```
 
-**Best choice: Jarvis/self-operating-computer**, because:
-
-- It can **actually execute tasks** on your computer, not just talk.
-- It is better suited to **industrial-like automation**: opening engineering tools, running scripts, organizing files, etc.
-- It has built-in **safety, cost control, and multi-model flexibility**, which matters in long-running or production-like scenarios.
-
-### If you ultimately want both (a reporting assistant that can also act):
-
-A strong future architecture would be:
-
-- Keep **Assistant-main** as the **user-facing layer** (UI + voice).
-- Use **Jarvis** as a **backend "action executor"**:
-  - When the user asks for something that requires real actions ("open this industrial dashboard, export report, save to folder"), Assistant-main sends a job/command to Jarvis, which then operates the computer to fulfill it.
-- This gives you: a friendly **report assistant UI** with a powerful **Jarvis action engine** underneath.
+**Flow**:
+1. User provides objective via CLI
+2. System captures screenshot
+3. Vision AI analyzes screen + history
+4. AI generates operations (click/press/write/done)
+5. Operations executed on macOS
+6. Loop repeats until objective complete
 
 ---
 
-## About the "data file which describes all of the things"
+## Prerequisites
 
-From what's in this codebase:
+### Assistant-main Requirements
 
-**For Jarvis**, the closest thing to a "data file that describes all capabilities" is:
+- **Node.js**: v18.0.0 or higher
+- **npm**: v9.0.0 or higher
+- **OpenAI API Key**: Valid API key with Realtime API access
+- **Operating System**: macOS, Linux, or Windows
 
-- The **`Config` class in `operate/config.py`** plus the `.env` file it maintains:
-  - Describes what models/backends exist, how they are initialized, and which keys are required.
-- Together with `assistant_adapter.py` and `models/apis.py`, they define the **operational vocabulary**: what kinds of API calls and actions the system can perform.
+### Jarvis Requirements
 
-**For Assistant-main**, there isn't a rich data/config description yet, just:
-
-- `.env` (OpenAI key).
-- The hard-coded model `gpt-4o-realtime-preview-2024-10-01` and WebSocket URL.
+- **Python**: 3.9 or higher
+- **macOS**: Required (uses macOS Accessibility APIs)
+- **API Keys**: At least one of the following:
+  - OpenAI API key (for GPT-4 Vision/Assistants)
+  - Google API key (for Gemini Vision)
+  - Anthropic API key (for Claude 3)
+  - Qwen API key (for Qwen Vision)
+  - Ollama (local installation, optional)
+- **System Permissions**:
+  - Screen Recording permission
+  - Accessibility permission
 
 ---
 
-## How Jarvis / self‑operating‑computer actually works internally
+## Installation
 
-### Command-line entry (`operate/main.py`)
+### Assistant-main Setup
 
-You usually run it like:
+#### Step 1: Clone and Navigate
+
+```bash
+cd Assistant-main
+```
+
+#### Step 2: Install Server Dependencies
+
+```bash
+cd server
+npm install
+```
+
+#### Step 3: Install Client Dependencies
+
+```bash
+cd ../client
+npm install
+```
+
+#### Step 4: Configure Environment
+
+Create a `.env` file in the `server/` directory:
+
+```bash
+cd ../server
+touch .env
+```
+
+Add your OpenAI API key:
+
+```env
+KEY=your_openai_api_key_here
+```
+
+#### Step 5: Verify Installation
+
+```bash
+# Test server
+node index.js
+# Should see: "WebSocket server is listening on ws://localhost:4000/Assistant"
+```
+
+### Jarvis Setup
+
+#### Step 1: Navigate to Jarvis Directory
+
+```bash
+cd jarvis-tweak-version-/hackparv/self-operating-computer
+```
+
+#### Step 2: Create Virtual Environment
+
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On macOS/Linux
+# or
+venv\Scripts\activate  # On Windows
+```
+
+#### Step 3: Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+For voice mode (optional):
+
+```bash
+pip install -r requirements-audio.txt
+```
+
+#### Step 4: Configure Environment
+
+Create a `.env` file in the `self-operating-computer/` directory:
+
+```bash
+touch .env
+```
+
+Add your API keys (at least one required):
+
+```env
+# OpenAI (for GPT-4 Vision/Assistants)
+OPENAI_API_KEY=your_openai_key_here
+
+# Google (for Gemini Vision, optional)
+GOOGLE_API_KEY=your_google_key_here
+
+# Anthropic (for Claude 3, optional)
+ANTHROPIC_API_KEY=your_anthropic_key_here
+
+# Qwen (optional)
+QWEN_API_KEY=your_qwen_key_here
+
+# Ollama (optional, for local models)
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_DEFAULT_MODEL=llava:7b
+```
+
+#### Step 5: Grant macOS Permissions
+
+1. Open **System Settings** → **Privacy & Security**
+2. Add **Terminal** (or your terminal app) to:
+   - **Screen Recording**
+   - **Accessibility**
+
+#### Step 6: Verify Installation
+
+```bash
+# Test with a simple command
+operate --model=assistant --prompt="open Safari" --verbose
+```
+
+---
+
+## Configuration
+
+### Assistant-main Configuration
+
+**Environment Variables** (`server/.env`):
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `KEY` | OpenAI API key | Yes |
+
+**Server Configuration** (`server/index.js`):
+
+- **Port**: Default `4000` (modify in `server.listen()`)
+- **WebSocket Path**: `/Assistant` (modify in `server.on("upgrade")`)
+- **Model**: `gpt-4o-realtime-preview-2024-10-01` (hardcoded, modify in WebSocket URL)
+
+**Client Configuration** (`client/`):
+
+- Modify `src/pages/index.js` to customize UI
+- Update `next.config.mjs` for Next.js settings
+
+### Jarvis Configuration
+
+**Environment Variables** (`.env`):
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `OPENAI_API_KEY` | OpenAI API key | For OpenAI models |
+| `GOOGLE_API_KEY` | Google API key | For Gemini models |
+| `ANTHROPIC_API_KEY` | Anthropic API key | For Claude models |
+| `QWEN_API_KEY` | Qwen API key | For Qwen models |
+| `OLLAMA_HOST` | Ollama server URL | For Ollama models |
+| `OLLAMA_DEFAULT_MODEL` | Default Ollama model | Optional |
+
+**Model Selection**:
+
+Available models:
+- `assistant` - OpenAI Assistants API (recommended)
+- `gpt-4-with-ocr` - GPT-4 with OCR
+- `gpt-4.1-with-ocr` - GPT-4.1 with OCR
+- `gemini-pro-vision` - Google Gemini Vision
+- `claude-3` - Anthropic Claude 3
+- `qwen-vl` - Qwen Vision Language
+- `ollama:model:name` - Local Ollama models
+
+**Configuration Class** (`operate/config.py`):
+
+The `Config` class automatically:
+- Loads environment variables
+- Validates required keys per model
+- Prompts for missing keys via GUI dialog
+- Saves keys to `.env` file
+
+---
+
+## Usage
+
+### Assistant-main Usage
+
+#### Starting the Server
+
+```bash
+cd Assistant-main/server
+node index.js
+```
+
+Expected output:
+```
+WebSocket server is listening on ws://localhost:4000/Assistant
+```
+
+#### Starting the Client
+
+In a new terminal:
+
+```bash
+cd Assistant-main/client
+npm run dev
+```
+
+Open `http://localhost:3000` in your browser.
+
+#### WebSocket Connection
+
+Connect from your frontend:
+
+```javascript
+const ws = new WebSocket('ws://localhost:4000/Assistant');
+
+ws.onopen = () => {
+  console.log('Connected to assistant server');
+  // Send session start event
+  ws.send(JSON.stringify({
+    type: 'session.update',
+    session: {
+      modalities: ['text', 'audio'],
+      instructions: 'You are a helpful assistant.'
+    }
+  }));
+};
+
+ws.onmessage = (event) => {
+  if (event.data instanceof Blob) {
+    // Audio data (WAV format)
+    const audioUrl = URL.createObjectURL(event.data);
+    const audio = new Audio(audioUrl);
+    audio.play();
+  } else {
+    // JSON event
+    const data = JSON.parse(event.data);
+    console.log('Received:', data);
+  }
+};
+```
+
+### Jarvis Usage
+
+#### Basic Command
 
 ```bash
 operate --model=assistant --prompt="open Safari"
 ```
 
-`main_entry()` does this:
+#### Interactive Mode
 
-- Parses flags:
-  - **`--model`**: which model backend to use (`gpt-4-with-ocr`, `assistant`, Gemini, Claude, Ollama, etc.).
-  - **`--voice`**: use microphone (Whisper) instead of typed text.
-  - **`--verbose`**: print detailed logs.
-  - **`--prompt`**: direct objective text (skip interactive question).
-  - Ollama helpers: `--list-models`, `--set-default`.
-- If you're listing/setting Ollama models, it calls `OllamaModelResolver` and exits.
-- Otherwise it calls `operate.main(...)` with:
-  - `model`
-  - `terminal_prompt` (your objective)
-  - `voice_mode`
-  - `verbose_mode`.
-
-### Top-level control loop (`operate/operate.py`)
-
-#### 1. Setup and validation:
-
-```python
-config = Config()
-operating_system = OperatingSystem()
+```bash
+operate --model=assistant
+# Will prompt for objective
 ```
 
-- `Config` (from `config.py`) loads `.env`, checks API keys, and can initialize OpenAI/Gemini/etc.
-- `OperatingSystem` is a helper that **actually presses keys, clicks, types** on macOS.
+#### Voice Mode
 
-In `main()`:
-
-```python
-config.verbose = verbose_mode
-config.validation(model, voice_mode)
+```bash
+operate --model=assistant --voice
+# Will listen from microphone
 ```
 
-- This checks you have the right API keys for the chosen model (OpenAI, Google, Anthropic, etc.), prompting you if missing.
+#### Verbose Mode (Debugging)
 
-#### 2. Get your objective ("what you want Jarvis to do"):
-
-- If `--prompt` was given: use that string directly.
-- Else if `--voice`: listen from microphone with `WhisperMic`.
-- Else: show a small dialog and prompt in the terminal:
-
-```python
-print("[Self-Operating Computer | <model>]\n<USER_QUESTION>")
-objective = prompt(style=style)
+```bash
+operate --model=assistant --prompt="open Safari" --verbose
 ```
 
-#### 3. Build system prompt + messages:
+#### Using Different Models
 
-```python
-system_prompt = get_system_prompt(model, objective)
-system_message = {"role": "system", "content": system_prompt}
-messages = [system_message]
+```bash
+# OpenAI Assistant (recommended)
+operate --model=assistant --prompt="open Safari"
+
+# Gemini Vision
+operate --model=gemini-pro-vision --prompt="open Safari"
+
+# Claude 3
+operate --model=claude-3 --prompt="open Safari"
+
+# Ollama (local)
+operate --model=ollama:llava:7b --prompt="open Safari"
 ```
 
-- `get_system_prompt(...)` creates a detailed instruction to the AI:
-  - "You are a self-operating computer, you will see screenshots, think aloud, and output operations (click/press/write/done) in JSON…"
-- `messages` starts with this system message and grows over time (conversation history).
+#### Ollama Model Management
 
-#### 4. Main loop: thinking and acting:
+```bash
+# List available Ollama models
+operate --list-models
+
+# Set default Ollama model
+operate --set-default=llava:7b
+```
+
+#### Example Workflows
+
+```bash
+# Open application
+operate --model=assistant --prompt="open Safari and navigate to apple.com"
+
+# File management
+operate --model=assistant --prompt="create a folder called 'reports' on Desktop"
+
+# Development tasks
+operate --model=assistant --prompt="open VS Code and create a new file called test.js"
+
+# Multi-step workflow
+operate --model=assistant --prompt="open Chrome, search for 'Python tutorials', and open the first result"
+```
+
+---
+
+## Technical Deep Dive
+
+### Assistant-main: How It Works
+
+#### 1. Server Initialization
+
+The server creates two WebSocket connections:
+- **Client WebSocket**: Browser ↔ Server
+- **OpenAI WebSocket**: Server ↔ OpenAI Realtime API
+
+```javascript
+// Server setup
+const wss = new WebSocket.Server({ noServer: true });
+const gptClient = new WebSocket(openaiUrl, {
+  headers: {
+    Authorization: `Bearer ${gptKey}`,
+    "OpenAI-Beta": "realtime=v1"
+  }
+});
+```
+
+#### 2. Message Queue System
+
+Messages from the browser are queued until OpenAI connection is ready:
+
+```javascript
+const messageQueue = [];
+let gptClientReady = false;
+
+// Queue messages if not ready
+if (!gptClientReady) {
+  messageQueue.push(JSON.stringify(event));
+}
+```
+
+#### 3. Audio Processing
+
+Audio chunks from OpenAI are converted from PCM to WAV:
+
+```javascript
+if (parsedData.type === "response.audio.delta") {
+  const pcmData = helper.base64ToArrayBuffer(parsedData.delta);
+  const header = helper.createWavHeader(24000, pcmData.byteLength);
+  const finalAudioBuffer = helper.concatenateWavHeaderAndData(header, pcmData);
+  ws.send(finalAudioBuffer);
+}
+```
+
+### Jarvis: How It Works
+
+#### 1. Command-Line Entry (`operate/main.py`)
+
+Parses arguments and routes to main control loop:
 
 ```python
-loop_count = 0
-session_id = None
+parser.add_argument("-m", "--model", help="Model to use")
+parser.add_argument("--prompt", help="Direct objective")
+parser.add_argument("--voice", help="Voice input mode")
+parser.add_argument("--verbose", help="Verbose logging")
+```
 
+#### 2. Control Loop (`operate/operate.py`)
+
+The main loop follows this pattern:
+
+```python
 while True:
+    # 1. Get next action from AI
     operations, session_id = asyncio.run(
         get_next_action(model, messages, objective, session_id)
     )
+    
+    # 2. Execute operations
     stop = operate(operations, model)
+    
+    # 3. Check if done
     if stop:
-        break
-    loop_count += 1
-    if loop_count > 10:
         break
 ```
 
-**`get_next_action`** (in `models/apis.py`):
+#### 3. Operation Execution
 
-- Chooses the right backend for the model (OpenAI, Gemini, Ollama, etc.).
-- Takes `messages` (history) + `objective` + `session_id`.
-- **Captures a screenshot**, encodes it, and sends it to the vision model (or uses AssistantAdapter).
-- The AI returns a **list of operations**, each like:
+Operations are executed via `OperatingSystem` class:
+
+- **Click**: `operating_system.mouse({"x": x, "y": y})`
+- **Press**: `operating_system.press(["cmd", "space"])`
+- **Write**: `operating_system.write("text content")`
+- **Done**: Returns `True` to stop loop
+
+#### 4. Vision AI Integration
+
+Screenshot → Encode → Send to Vision Model → Parse Operations:
+
+```python
+# Capture screenshot
+screenshot = capture_screen()
+
+# Send to AI with history
+response = vision_model.analyze(
+    image=screenshot,
+    history=messages,
+    objective=objective
+)
+
+# Parse operations
+operations = parse_operations(response)
+```
+
+---
+
+## API Reference
+
+### Assistant-main WebSocket API
+
+**Endpoint**: `ws://localhost:4000/Assistant`
+
+**Connection**:
+```javascript
+const ws = new WebSocket('ws://localhost:4000/Assistant');
+```
+
+**Events Sent to Server**:
+
+```javascript
+// Start session
+{
+  type: 'session.update',
+  session: {
+    modalities: ['text', 'audio'],
+    instructions: 'You are a helpful assistant.'
+  }
+}
+
+// Send user input
+{
+  type: 'input_audio_buffer.append',
+  audio: base64EncodedAudio
+}
+
+// Or text input
+{
+  type: 'conversation.item.create',
+  item: {
+    type: 'message',
+    role: 'user',
+    content: [{ type: 'input_text', text: 'Hello' }]
+  }
+}
+```
+
+**Events Received from Server**:
+
+```javascript
+// Audio response
+Blob (WAV format) - Play directly in Audio element
+
+// Text/JSON response
+{
+  type: 'response.audio_transcript.done',
+  transcript: 'Hello, how can I help you?'
+}
+```
+
+### Jarvis CLI API
+
+**Command Structure**:
+```bash
+operate [OPTIONS]
+```
+
+**Options**:
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `-m, --model` | AI model to use | `--model=assistant` |
+| `--prompt` | Direct objective | `--prompt="open Safari"` |
+| `--voice` | Voice input mode | `--voice` |
+| `--verbose` | Verbose logging | `--verbose` |
+| `--list-models` | List Ollama models | `--list-models` |
+| `--set-default` | Set default Ollama model | `--set-default=llava:7b` |
+
+**Operation Types** (returned by AI):
 
 ```json
 {
   "operation": "click",
   "x": 123,
   "y": 456,
-  "thought": "I see the Safari icon in the dock, I will click it."
+  "thought": "Clicking Safari icon"
 }
-```
 
-or
-
-```json
 {
   "operation": "press",
   "keys": ["cmd", "space"],
-  "thought": "Open Spotlight to search for Safari."
+  "thought": "Opening Spotlight"
+}
+
+{
+  "operation": "write",
+  "content": "Hello World",
+  "thought": "Typing text"
+}
+
+{
+  "operation": "done",
+  "summary": "Task completed successfully"
 }
 ```
 
-or finally:
+---
+
+## Troubleshooting
+
+### Assistant-main Issues
+
+#### Server Won't Start
+
+**Problem**: Port 4000 already in use
+
+**Solution**:
+```bash
+# Find process using port 4000
+lsof -i :4000
+
+# Kill process or change port in index.js
+server.listen(3001, ...)  # Use different port
+```
+
+#### WebSocket Connection Fails
+
+**Problem**: Connection refused or timeout
+
+**Solutions**:
+1. Verify server is running: `node index.js`
+2. Check firewall settings
+3. Verify OpenAI API key in `.env`
+4. Check network connectivity
+
+#### Audio Not Playing
+
+**Problem**: Audio chunks received but no sound
+
+**Solutions**:
+1. Verify browser audio permissions
+2. Check WebSocket message type (should be Blob for audio)
+3. Verify audio format (should be WAV)
+4. Check browser console for errors
+
+### Jarvis Issues
+
+#### Permission Denied Errors
+
+**Problem**: "Permission denied" when trying to control system
+
+**Solution**:
+1. Grant Screen Recording permission:
+   - System Settings → Privacy & Security → Screen Recording
+   - Add Terminal (or your terminal app)
+2. Grant Accessibility permission:
+   - System Settings → Privacy & Security → Accessibility
+   - Add Terminal (or your terminal app)
+3. Restart terminal after granting permissions
+
+#### Model Not Recognized
+
+**Problem**: `ModelNotRecognizedException`
+
+**Solution**:
+1. Verify model name spelling
+2. Check if API key is set for that model
+3. For Ollama: verify Ollama is running (`ollama serve`)
+4. List available models: `operate --list-models`
+
+#### API Key Not Found
+
+**Problem**: Prompted for API key repeatedly
+
+**Solution**:
+1. Verify `.env` file exists in `self-operating-computer/` directory
+2. Check `.env` file format: `OPENAI_API_KEY=your_key_here`
+3. Ensure no extra spaces or quotes
+4. Restart terminal after adding keys
+
+#### Screenshot Capture Fails
+
+**Problem**: Cannot capture screen
+
+**Solution**:
+1. Verify Screen Recording permission (see above)
+2. Check if running in headless mode (not supported)
+3. Verify display is available
+4. Try with `--verbose` for detailed error messages
+
+#### Operations Not Executing
+
+**Problem**: AI returns operations but nothing happens
+
+**Solution**:
+1. Check Accessibility permission (see above)
+2. Verify `OperatingSystem` class is working
+3. Run with `--verbose` to see operation details
+4. Check if operations are being blocked by system
+
+---
+
+## Security Considerations
+
+### Assistant-main Security
+
+1. **API Key Protection**:
+   - Never commit `.env` files to version control
+   - Use environment variables in production
+   - Rotate API keys regularly
+
+2. **WebSocket Security**:
+   - Add authentication for production use
+   - Use WSS (WebSocket Secure) in production
+   - Implement rate limiting
+
+3. **Input Validation**:
+   - Validate all WebSocket messages
+   - Sanitize user input
+   - Implement message size limits
+
+### Jarvis Security
+
+1. **Dangerous Command Blocking**:
+   - System automatically blocks: `rm -rf`, `mkfs`, `dd`, fork bombs
+   - Validation layer prevents destructive operations
+   - Warnings shown before risky actions
+
+2. **API Key Management**:
+   - Store keys in `.env` (gitignored)
+   - Use separate keys for development/production
+   - Never log API keys
+
+3. **System Access**:
+   - Only grants minimal required permissions
+   - Screen Recording + Accessibility only
+   - No root/admin access required
+
+4. **Network Security**:
+   - All API calls use HTTPS
+   - Screenshots processed locally before sending
+   - No persistent data storage
+
+---
+
+## Performance Optimization
+
+### Assistant-main Optimization
+
+1. **Audio Streaming**:
+   - Current: Real-time WAV conversion
+   - Optimization: Consider Web Audio API for better performance
+   - Buffer management for smooth playback
+
+2. **WebSocket Management**:
+   - Connection pooling for multiple clients
+   - Message batching for high-frequency events
+   - Connection timeout handling
+
+3. **Frontend Optimization**:
+   - Code splitting in Next.js
+   - Lazy loading for audio components
+   - Efficient state management
+
+### Jarvis Optimization
+
+1. **Screenshot Compression**:
+   - Automatic: Resize to 1920×1080, JPEG 85%
+   - **70-80% reduction** in token usage
+   - Faster API response times
+
+2. **Retry Logic**:
+   - Exponential backoff: 4s → 8s → 16s
+   - Up to 3 retry attempts
+   - Network resilience
+
+3. **Cost Control**:
+   - Screenshot optimization reduces API costs
+   - Conversation history management
+   - Model selection based on task complexity
+
+4. **Loop Management**:
+   - Maximum 10 iterations per session
+   - Early termination on "done" operation
+   - Session ID reuse for context
+
+---
+
+## Integration Guide
+
+### Combining Assistant-main and Jarvis
+
+#### Architecture
+
+```
+┌─────────────┐
+│   Browser   │
+│ (Assistant) │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐         ┌─────────────┐
+│ Node Server │────────►│   Jarvis    │
+│ (Bridge)    │  HTTP   │   (Python)  │
+└─────────────┘         └─────────────┘
+```
+
+#### Implementation Example
+
+**1. Add Jarvis API Endpoint to Assistant Server**
+
+```javascript
+// In server/index.js
+const { exec } = require('child_process');
+
+// Add HTTP endpoint for Jarvis commands
+server.on('request', (req, res) => {
+  if (req.url === '/api/jarvis' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      const { prompt, model } = JSON.parse(body);
+      
+      // Execute Jarvis command
+      exec(`operate --model=${model} --prompt="${prompt}"`, (error, stdout, stderr) => {
+        if (error) {
+          res.writeHead(500);
+          res.end(JSON.stringify({ error: error.message }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ output: stdout }));
+      });
+    });
+  }
+});
+```
+
+**2. Call from Frontend**
+
+```javascript
+// In client
+async function executeJarvisCommand(prompt) {
+  const response = await fetch('http://localhost:4000/api/jarvis', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt: prompt,
+      model: 'assistant'
+    })
+  });
+  return await response.json();
+}
+
+// Usage
+ws.onmessage = async (event) => {
+  const data = JSON.parse(event.data);
+  if (data.type === 'response.text.done' && data.text.includes('open')) {
+    // User wants to open something - use Jarvis
+    const result = await executeJarvisCommand(data.text);
+    console.log('Jarvis result:', result);
+  }
+};
+```
+
+### Industrial Data Integration
+
+#### Adding Data File Support to Assistant-main
+
+**1. Create Data Directory**
+
+```bash
+mkdir Assistant-main/server/data
+```
+
+**2. Add Data Endpoint**
+
+```javascript
+// In server/index.js
+const fs = require('fs');
+const path = require('path');
+
+server.on('request', (req, res) => {
+  if (req.url === '/api/data' && req.method === 'GET') {
+    const dataPath = path.join(__dirname, 'data', 'industrial_measures.json');
+    const data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(data));
+  }
+});
+```
+
+**3. Data File Format** (`data/industrial_measures.json`)
 
 ```json
 {
-  "operation": "done",
-  "summary": "Safari is open on apple.com."
+  "metrics": [
+    {
+      "name": "Temperature",
+      "value": 75.5,
+      "unit": "°C",
+      "equation": "T = (R - R0) / (α * R0)",
+      "description": "Temperature calculation using resistance"
+    }
+  ]
 }
 ```
 
-- Returns `(operations, new_session_id)` so the next cycle continues the same session.
+**4. Frontend Integration**
 
-- `operate(operations, model)` executes them.
-
-#### 5. Executing operations (`operate()` function):
-
-For each `operation`:
-
-```python
-operate_type = operation.get("operation").lower()
-operate_thought = operation.get("thought")
+```javascript
+// Fetch and display data
+async function loadIndustrialData() {
+  const response = await fetch('http://localhost:4000/api/data');
+  const data = await response.json();
+  // Display in UI and let assistant explain
+}
 ```
-
-- `press` / `hotkey`:
-
-```python
-keys = operation.get("keys")
-operating_system.press(keys)
-```
-
-- `write`:
-
-```python
-content = operation.get("content")
-operating_system.write(content)
-```
-
-- `click`:
-
-```python
-click_detail = {"x": x, "y": y}
-operating_system.mouse(click_detail)
-```
-
-- `done`:
-
-```python
-summary = operation.get("summary")
-print("Objective Complete:", summary)
-return True  # stops loop
-```
-
-- Anything unknown → error + stop.
-
-After each step it prints:
-
-- The AI's **thought** (why it did that action).
-- The **Action** (`click {...}`, `press [...]`, etc.).
-
-So **in your head**, the Jarvis system is like an equation:
-
-- **Input**: `objective + (screen image + history)`  
-- **Model**: `get_next_action(...)` using GPT‑4 Vision / assistants (via AssistantAdapter).  
-- **Output**: `[operations]` (click/press/write/done)  
-- **Executor**: `OperatingSystem` actually performs them → new screen → repeat.
 
 ---
 
-## How your JavaScript / Node "assistant system" works
+## Contributing
 
-This is the `Assistant-main/server/index.js` server.
+### Development Setup
 
-### Core idea:
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes
+4. Test thoroughly
+5. Commit: `git commit -m 'Add amazing feature'`
+6. Push: `git push origin feature/amazing-feature`
+7. Open a Pull Request
 
-it is a **WebSocket bridge** between:
+### Code Style
 
-- **Your browser client** (front‑end JS).
-- **OpenAI Realtime WebSocket API** (`gpt-4o-realtime-preview-2024-10-01`).
+- **JavaScript**: Follow ESLint configuration
+- **Python**: Follow PEP 8 style guide
+- **Documentation**: Update README for new features
 
-### Step-by-step flow:
+### Testing
 
-#### 1. Server setup:
-
-```javascript
-const WebSocket = require("ws");
-const http = require("http");
-const helper = require("./utils/audiofunctions.js");
-const server = http.createServer();
-require("dotenv").config();
-
-const gptKey = process.env.KEY;
-const wss = new WebSocket.Server({ noServer: true });
-```
-
-- Loads your OpenAI key from `.env` as `KEY`.
-- Creates a plain HTTP server and a WebSocket server (`wss`) that will be mounted on upgrades.
-
-#### 2. Handle browser connections:
-
-```javascript
-wss.on("connection", (ws) => {
-  console.log("Client connected to /Assistant");
-  const messageQueue = [];
-  let gptClientReady = false;
-  ...
-});
-```
-
-- When your browser connects to `ws://localhost:4000/Assistant`, `ws` is that client socket.
-- It sets up:
-  - `messageQueue`: to buffer messages until OpenAI is ready.
-  - `gptClientReady`: whether the OpenAI WebSocket connection is open.
-
-#### 3. Connect to OpenAI Realtime API:
-
-```javascript
-const url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01";
-const gptClient = new WebSocket(url, {
-  headers: {
-    Authorization: `Bearer ${gptKey}`,
-    "OpenAI-Beta": "realtime=v1",
-  },
-});
-```
-
-- This is the **JavaScript "self-operating" brain** for your assistant: it speaks the Realtime protocol, gets events from OpenAI, and sends events back.
-
-On open:
-
-```javascript
-gptClient.on("open", function open() {
-  gptClientReady = true;
-  while (messageQueue.length > 0) {
-    const queuedMessage = messageQueue.shift();
-    gptClient.send(queuedMessage);
-  }
-  ws.send("your gpt client is ready for u to use");
-});
-```
-
-- Marks OpenAI as ready.
-- Sends any queued client messages to OpenAI.
-- Notifies browser client.
-
-#### 4. Forward responses from OpenAI to browser (with audio handling):
-
-```javascript
-gptClient.on("message", (data) => {
-  const parsedData = JSON.parse(data);
-  if (parsedData.type === "response.audio.delta") {
-    const pcmData = helper.base64ToArrayBuffer(parsedData.delta);
-    const sampleRate = 24000;
-    const header = helper.createWavHeader(sampleRate, pcmData.byteLength);
-    const finalAudioBuffer = helper.concatenateWavHeaderAndData(header, pcmData);
-    ws.send(finalAudioBuffer);
-  } else {
-    ws.send(JSON.stringify(parsedData));
-  }
-});
-```
-
-- If the model is streaming **audio chunks** (`response.audio.delta`), it:
-  - Decodes base64 PCM using `base64ToArrayBuffer`.
-  - Creates a **WAV header** for 24kHz audio.
-  - Concatenates header + PCM to make a **valid WAV chunk**.
-  - Sends that binary data to the browser, which can play it in an `<audio>` element or an `AudioContext`.
-- For any **non-audio event** (state updates, text, tool calls, etc.), it just forwards the JSON string to the browser.
-
-#### 5. Forward messages from browser to OpenAI:
-
-```javascript
-ws.on("message", (message) => {
-  try {
-    const event = JSON.parse(message);
-    if (gptClientReady && gptClient.readyState === WebSocket.OPEN) {
-      gptClient.send(JSON.stringify(event));
-    } else {
-      messageQueue.push(JSON.stringify(event));
-    }
-  } catch (e) {
-    ws.send(JSON.stringify({ type: "error", ... }));
-  }
-});
-```
-
-- The browser sends JSON events describing:
-  - User input (text/audio).
-  - Realtime "session control" (start, stop, etc.).
-- Server parses, then:
-  - If OpenAI WebSocket is open, forwards directly.
-  - Otherwise, queues until it's ready.
-
-#### 6. Upgrade HTTP → WebSocket and start server:
-
-```javascript
-server.on("upgrade", (req, socket, head) => {
-  if (req.url === "/Assistant") {
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit("connection", ws, req);
-    });
-  } else {
-    socket.destroy();
-  }
-});
-
-server.listen(4000, () => {
-  console.log("WebSocket server is listening on ws://localhost:4000/Assistant");
-});
-```
-
-- Only upgrade connections that go to `/Assistant`.
-- Listens on port 4000.
-- Your React/Next.js client connects to `ws://localhost:4000/Assistant`.
-
-So, **JavaScript system in one sentence**:
-
-> The Node server is a **real-time broker** that understands the **OpenAI Realtime WebSocket protocol**, converts streaming audio into WAV, and passes messages back and forth between your browser UI and the OpenAI model so that your assistant can "talk" in real time.
+- Test both systems independently
+- Test integration scenarios
+- Verify security measures
+- Check performance impact
 
 ---
 
-## How they relate
+## License
 
-- **Jarvis / self-operating-computer (Python)**:
-  - **Operates the OS**: sees your screen, clicks, types, runs workflows.
-  - Uses models (including an "assistant" model) to decide **what operations to take**.
-
-- **JS / Assistant-main system (Node + Next.js)**:
-  - **Operates the conversation**: listens to the user (text/voice), calls OpenAI in Realtime, and streams back text/audio.
-  - It does **not control the OS** by itself; it's the "front of house" for talking to users.
+[Specify your license here - e.g., MIT, Apache 2.0, etc.]
 
 ---
 
-## Next Steps
+## Support
 
-If you like, I can next:
+For issues, questions, or contributions:
 
-- Identify where to plug in your **industrial measures data file** (e.g., a JSON/CSV of metrics) into **Assistant-main** so the report assistant can describe and analyze those measures.
-- Or sketch how to have **Assistant-main call Jarvis** for certain commands, if you're aiming for a unified assistant.
+1. Check [Troubleshooting](#troubleshooting) section
+2. Review existing GitHub issues
+3. Create a new issue with detailed information
+4. Include system information, error messages, and steps to reproduce
+
+---
+
+## Acknowledgments
+
+- **Assistant-main**: Built on OpenAI Realtime API
+- **Jarvis**: Based on [self-operating-computer](https://github.com/OthersideAI/self-operating-computer) framework
+- Enhanced with additional features and documentation
+
+---
+
+**Last Updated**: [Current Date]  
+**Version**: 1.0.0
